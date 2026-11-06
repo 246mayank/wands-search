@@ -6,5 +6,5 @@ pipeline:
     class: 1
     hierarchy: 0.5
     features: 0.5
-    description: 0.5
+    description: 3.0
   stem: true
