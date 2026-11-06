@@ -5,7 +5,7 @@
 **Hybrid product search with offline LLM query understanding, evaluated on [WANDS](https://github.com/wayfair/WANDS), Wayfair's public product-search relevance dataset, with a CI gate that blocks relevance regressions.**
 
 <!-- headline:start -->
-*Not run yet: the test split runs once, after the `freeze-v1` tag.*
+**NDCG@10 0.7404 (BM25 on product names) to 0.8287 (hybrid retrieval) on 160 held-out WANDS queries, run once after freezing.** The frozen `final` pipeline adds the LLM query-understanding boost chosen on dev and scored 0.8150: -0.0137 [-0.0275, -0.0012] against hybrid alone, 95% CI in brackets, so the boost's dev gain did not hold on test. Commit `2472151`, report [`test_2472151.md`](results/test_2472151.md).
 <!-- headline:end -->
 
 This is an offline evaluation on a public dataset: 42,994 products, 480 queries and 233,448 human labels. Nothing here is deployed or has seen real traffic.
@@ -15,7 +15,19 @@ This is an offline evaluation on a public dataset: 42,994 products, 480 queries 
 The test split was run once, after tagging `freeze-v1`, with every row in this table run together. No tuning happened afterwards.
 
 <!-- test_table:start -->
-*Not run yet: the test split runs once, after the `freeze-v1` tag.*
+| run | ndcg@10 | ndcg_exact@10 | mrr@10 | recall@100 | capped_recall@100 | judged@10 | delta ndcg@10 vs bm25_name [95% CI] |
+|---|---|---|---|---|---|---|---|
+| `bm25_name` | 0.7404 | 0.5940 | 0.6977 | 0.3874 | 0.7176 | 0.9231 | base |
+| `bm25f` | 0.8045 | 0.6414 | 0.7198 | 0.4209 | 0.7702 | 0.9469 | +0.0640 [+0.0420, +0.0878] * |
+| `dense` | 0.7667 | 0.6443 | 0.7481 | 0.3762 | 0.6960 | 0.8637 | +0.0263 [-0.0022, +0.0562] |
+| `hybrid_rrf` | 0.8287 | 0.6732 | 0.7462 | 0.4246 | 0.7696 | 0.9456 | +0.0883 [+0.0631, +0.1156] * |
+| `final` | 0.8150 | 0.6309 | 0.6989 | 0.4269 | 0.7756 | 0.9394 | +0.0746 [+0.0473, +0.1043] * |
+| `hybrid_qu_filter` | 0.7952 | 0.6026 | 0.6914 | 0.3582 | 0.6907 | 0.9207 | +0.0547 [+0.0227, +0.0881] * |
+| `hybrid_qu_qwen` | 0.8193 | 0.6470 | 0.7160 | 0.4244 | 0.7716 | 0.9419 | +0.0789 [+0.0515, +0.1085] * |
+| `rerank_rrf_d20` | 0.8251 | 0.6562 | 0.7381 | 0.4269 | 0.7756 | 0.9419 | +0.0847 [+0.0587, +0.1133] * |
+| `ltr` | 0.8297 | 0.6684 | 0.7647 | 0.4396 | 0.7978 | 0.9481 | +0.0893 [+0.0641, +0.1169] * |
+
+From [`test_2472151.md`](results/test_2472151.md). `*`: the 95% paired-bootstrap CI excludes 0.
 <!-- test_table:end -->
 
 Hybrid retrieval is the win here, and `final` sits below it. `hybrid_rrf` was always a row in this table, but only `final` was chosen in advance, so calling hybrid the better pipeline is a judgement made after seeing test. The 20 worst queries are in [`ERROR_ANALYSIS.md`](docs/ERROR_ANALYSIS.md).
@@ -127,12 +139,14 @@ RRF ties the tuned weighted sum and has no parameter tuned on dev, so it stays. 
 Measured directly first, against labelled query classes:
 
 <!-- qu_scores:start -->
-| model | candidate recall | top-1 | any of 3 | fallbacks | report |
-|---|---|---|---|---|---|
-| Gemini | 298/316 (94.3%) | 229 (72.5%) | 276 (87.3%) | 0 | [`qu_gemini-3.5-flash-lite_v1_dev.md`](results/qu_gemini-3.5-flash-lite_v1_dev.md) |
-| Qwen 3B | 298/316 (94.3%) | 113 (35.8%) | 141 (44.6%) | 15 {'INVALID_CLASS': 12, 'MALFORMED_JSON': 3} | [`qu_qwen2.5-3b_v1_dev.md`](results/qu_qwen2.5-3b_v1_dev.md) |
+| model | split | candidate recall | top-1 | any of 3 | fallbacks | report |
+|---|---|---|---|---|---|---|
+| Gemini | dev | 298/316 (94.3%) | 229 (72.5%) | 276 (87.3%) | 0 | [`qu_gemini-3.5-flash-lite_v1_dev.md`](results/qu_gemini-3.5-flash-lite_v1_dev.md) |
+| Qwen 3B | dev | 298/316 (94.3%) | 113 (35.8%) | 141 (44.6%) | 15 {'INVALID_CLASS': 12, 'MALFORMED_JSON': 3} | [`qu_qwen2.5-3b_v1_dev.md`](results/qu_qwen2.5-3b_v1_dev.md) |
+| Gemini | test | 149/158 (94.3%) | 103 (65.2%) | 130 (82.3%) | 0 | [`qu_gemini-3.5-flash-lite_v1_test.md`](results/qu_gemini-3.5-flash-lite_v1_test.md) |
+| Qwen 3B | test | 149/158 (94.3%) | 61 (38.6%) | 75 (47.5%) | 4 {'INVALID_CLASS': 3, 'MALFORMED_JSON': 1} | [`qu_qwen2.5-3b_v1_test.md`](results/qu_qwen2.5-3b_v1_test.md) |
 
-Dev split, prompt `v1`, vs labelled query classes.
+Prompt `v1`, vs labelled query classes.
 <!-- qu_scores:end -->
 
 Many misses are noise in the labels rather than in the model, such as "camper" labelled Sheets And Sheet Sets. Then its effect on ranking:
