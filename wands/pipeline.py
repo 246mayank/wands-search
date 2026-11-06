@@ -12,7 +12,7 @@ from wands import data
 from wands.catalog import Catalog
 from wands.eval.qrels import Qrels, build_qrels
 from wands.qu.cache import QUCache, QUTable
-from wands.qu.rewrite import RewriteRetriever, load_rewrites
+from wands.qu.rewrite import REWRITES_PATH, RewriteRetriever, load_rewrites
 from wands.rerank import CrossEncoderReranker, CrossEncoderScorer
 from wands.retrievers.bm25f import BM25FRetriever, IndexStore
 from wands.retrievers.booster import QUBooster
@@ -112,7 +112,8 @@ def build(spec: dict, world: World, name: str = "pipeline") -> Retriever:
             name=name,
         )
     if kind == "rewrite":
-        return RewriteRetriever(build(spec["inner"], world), load_rewrites(), name=name)
+        rewrites = load_rewrites(Path(spec.get("path", REWRITES_PATH)))
+        return RewriteRetriever(build(spec["inner"], world), rewrites, name=name)
     if kind == "popularity":
         return PopularityPrior(build(spec["inner"], world), world.catalog, spec["weight"], name=name)
     if kind == "ltr":
