@@ -1,0 +1,5 @@
+# Trained on all of dev by `wands ltr train`. Dev scores for it come from `wands ltr cv`.
+name: ltr
+pipeline:
+  type: ltr
+  inner: {type: ref, path: configs/hybrid_qu.yaml, name: hybrid_qu}

@@ -72,6 +72,15 @@ def test_test_split_is_allowed_at_the_freeze_tag(monkeypatch):
     cli.require_freeze()
 
 
+def test_test_report_runs_only_once(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "require_freeze", lambda: None)
+    (tmp_path / "results").mkdir()
+    (tmp_path / "results" / "test_abc1234.md").write_text("done", encoding="utf-8")
+    with pytest.raises(typer.BadParameter, match="already been run"):
+        cli.test_report()
+
+
 class Echo:
     name = "echo"
 
