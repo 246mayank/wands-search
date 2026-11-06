@@ -1,0 +1,54 @@
+name: qu-record
+
+# A prompt change misses the cache, so the gate fails until the answers are re-recorded on purpose.
+# This is the only place CI talks to an LLM, and a person has to start it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: Prompt version, such as v2
+        required: true
+      model:
+        description: Model
+        default: gemini-3.5-flash-lite
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (CPU torch)
+        run: |
+          set -euo pipefail
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e .
+      - name: Fetch WANDS at the pinned commit
+        run: wands data fetch
+      - name: Record answers for dev
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MODEL: ${{ inputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+        run: wands qu run --model "$MODEL" --prompt "$PROMPT" --split dev
+      - name: Commit the cache to this branch
+        env:
+          MODEL: ${{ inputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cache/qu_cache.jsonl
+          git commit -m "Record QU answers: $MODEL prompt $PROMPT"
+          git push

@@ -1,0 +1,45 @@
+name: eval-gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (CPU torch)
+        run: |
+          set -euo pipefail
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e .
+      - name: Restore WANDS and embeddings
+        id: data
+        uses: actions/cache@v5
+        with:
+          path: data
+          key: wands-${{ hashFiles('wands/data.py', 'configs/embeddings-release.txt') }}
+      - name: Fetch WANDS at the pinned commit
+        run: wands data fetch
+      - name: Download product embeddings from the release
+        if: steps.data.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$(cat configs/embeddings-release.txt)" -p embeddings.npy -D data
+      - name: Gate final.yaml on dev against results/baseline.json
+        run: |
+          set -euo pipefail
+          wands gate --config configs/final.yaml | tee gate.txt
+          {
+            echo '```'
+            cat gate.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

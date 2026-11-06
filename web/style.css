@@ -1,0 +1,79 @@
+:root {
+  --ink: #1f2430;
+  --muted: #5d6475;
+  --line: #d9dde5;
+  --paper: #f6f7f9;
+  --card: #ffffff;
+  --accent: #7b189f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+
+header {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 8px;
+}
+
+h1 { margin: 0; font-size: 1.5rem; }
+
+header p { margin: 4px 0 12px; color: var(--muted); font-size: 0.9rem; }
+
+form { display: flex; gap: 8px; }
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 16px 32px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.card h2 { margin: 0 0 4px; font-size: 1rem; }
+
+.card .meta { color: var(--muted); font-size: 0.85rem; margin: 0 0 8px; }
+
+details { font-size: 0.8rem; }
+
+summary { cursor: pointer; color: var(--accent); }
+
+dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 6px 0 0; }
+
+dt { color: var(--muted); }
+
+dd { margin: 0; overflow-wrap: anywhere; }

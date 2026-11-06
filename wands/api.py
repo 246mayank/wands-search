@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Query as Param
+from fastapi import FastAPI
+from fastapi import Query as Param
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
