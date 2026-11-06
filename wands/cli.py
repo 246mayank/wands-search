@@ -536,8 +536,8 @@ def judge_report(
         "",
         "## Effect of unjudged results on the final pipeline",
         "",
-        f"The LLM labelled {len(llm)} of {len(unjudged)} unjudged top-10 products on dev. Human labels are never "
-        "changed. This estimates the bias from scoring unjudged products as 0; it is not a measurement.",
+        f"The LLM labelled {len(llm)} of {len(unjudged)} unjudged top-10 products on dev. Human labels are "
+        "never changed. This estimates the bias from scoring unjudged products as 0; it is not a measurement.",
         "",
         "| measure | as scored | with LLM labels |",
         "|---|---|---|",
