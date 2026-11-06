@@ -1,0 +1,62 @@
+# The cause of each of the 20 worst test queries. A judgement made after the single test run, from the
+# evidence `wands error-worksheet` prints. Drafted by Claude Code; see docs/AI_WORKFLOW.md.
+174:
+  cause: label looks inconsistent
+  evidence: "The labelled class is Licensed Products, yet those products are labelled Irrelevant and the Partial labels go to plain area rugs."
+344:
+  cause: unjudged results
+  evidence: "Gemini read an ottoman bed as a bed, a fair reading, and the whole top 10 is unjudged beds. The labels only cover ottomans."
+173:
+  cause: wrong class predicted
+  evidence: "The class Bed Accessories means parts such as bunk bed ladders, not bedroom decor. The Exact labels go to decorative sets."
+449:
+  cause: unjudged results
+  evidence: "The top 5 are all living room sets, the right class, but most of them were never judged."
+134:
+  cause: attribute ignored
+  evidence: "Bookcases of any colour and shape fill the page. Neither black nor hanging affects the order."
+339:
+  cause: wrong class predicted
+  evidence: "Ruckus is a line of classroom chairs. The boost lifted unrelated dining and office chairs over them, and the Exact matches fell to ranks 4 and 5."
+403:
+  cause: ambiguous query
+  evidence: "Wood rack can mean a rack made of wood or a rack for firewood. Annotators took the second, Gemini the first."
+32:
+  cause: attribute ignored
+  evidence: "Dressers of any colour fill the page. A dark gray dresser with no class in the catalog gets no class bonus and stays out of the top 10."
+155:
+  cause: vocabulary mismatch
+  evidence: "Floating means a low platform bed here, but the word also matches floating beer pong tables."
+292:
+  cause: attribute ignored
+  evidence: "Accent pillows of any colour rank near the top. White affects the order very little."
+443:
+  cause: unjudged results
+  evidence: "The page is patio sofas and sectionals, near the Exact ones, but half of the top 10 was never judged."
+331:
+  cause: unjudged results
+  evidence: "Upholstered beds fill the page, some of them Exact, and unjudged beds of the same kind sit among them."
+46:
+  cause: vocabulary mismatch
+  evidence: "Beach blue is not a catalog colour, so matches come from names that contain beach, including a brand."
+244:
+  cause: unjudged results
+  evidence: "The first three results are Exact, but only 3 of the top 10 were judged."
+20:
+  cause: vocabulary mismatch
+  evidence: "The typo in foutains leaves brick look as the only lexical match, so tiles fill the page even with Fountains predicted."
+233:
+  cause: vocabulary mismatch
+  evidence: "The query is a brand, and retrieval matches kelly and clarkson separately in unrelated product names."
+224:
+  cause: ambiguous query
+  evidence: "Cool designs is subjective. Plain bunk beds were labelled Partial and ones with a staircase or trundle Exact, and the query doesn't say which."
+285:
+  cause: attribute ignored
+  evidence: "The class is right, but kits of any size fill the page. The 48 inch size has no effect."
+35:
+  cause: vocabulary mismatch
+  evidence: "Enclosed means a cabinet, but rack matches open shoe racks by name. Gemini predicted no attribute to separate them."
+88:
+  cause: attribute ignored
+  evidence: "Chaise lounges fill the page whatever their colour. The only Exact label is a rose-gold arm chair outside the predicted classes."

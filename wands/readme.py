@@ -59,15 +59,17 @@ def headline() -> str:
     path = latest_test()
     if path is None:
         return NOT_RUN
-    table = tables(path)[0]
-    start, end = cell(table, "bm25_name", "ndcg@10"), cell(table, "final", "ndcg@10")
-    queries = re.search(r"(\d+) queries", path.read_text(encoding="utf-8")).group(1)
-    hybrid_table = tables(path)[1]
-    qu_delta = row(hybrid_table, "final")[-1]
+    table, after_hybrid = tables(path)[:2]
+    start, hybrid = cell(table, "bm25_name", "ndcg@10"), cell(table, "hybrid_rrf", "ndcg@10")
+    final = cell(table, "final", "ndcg@10")
+    queries = re.search(r"(\d+) (?:held-out )?queries", path.read_text(encoding="utf-8")).group(1)
+    qu_delta = row(after_hybrid, "final")[-1].removesuffix("*").strip()
     return (
-        f"**NDCG@10 {start} (BM25 on product names) to {end} (final pipeline) on {queries} held-out WANDS "
-        f"queries, run once after freezing.** Query understanding's share of that, against hybrid retrieval "
-        f"alone: {qu_delta}, 95% CI in brackets. Commit `{commit_of(path)}`, report {linked(path)}."
+        f"**NDCG@10 {start} (BM25 on product names) to {hybrid} (hybrid retrieval) on {queries} held-out "
+        f"WANDS queries, run once after freezing.** The frozen `final` pipeline adds the LLM "
+        f"query-understanding boost chosen on dev and scored {final}: {qu_delta} against hybrid alone, "
+        f"95% CI in brackets, so the boost's dev gain did not hold on test. Commit `{commit_of(path)}`, "
+        f"report {linked(path)}."
     )
 
 
@@ -85,19 +87,24 @@ def dev_table(name: str) -> str:
 
 def qu_scores() -> str:
     lines = []
-    for model, label in (("gemini-3.5-flash-lite", "Gemini"), ("qwen2.5-3b", "Qwen 3B")):
-        path = RESULTS / f"qu_{model}_v1_dev.md"
-        if path.exists():
-            scores = dict(
-                [cells.strip() for cells in line.strip("|").split("|")][:2]
-                for line in tables(path)[0].splitlines()[2:]
-            )
-            lines.append(
-                f"| {label} | {scores['candidate recall (ceiling)']} | {scores['top-1 class correct']} "
-                f"| {scores['any of up to 3 classes correct']} | {scores['fallbacks']} | {linked(path)} |"
-            )
-    head = "| model | candidate recall | top-1 | any of 3 | fallbacks | report |\n|---|---|---|---|---|---|"
-    return head + "\n" + "\n".join(lines) + "\n\nDev split, prompt `v1`, vs labelled query classes."
+    for split in ("dev", "test"):
+        for model, label in (("gemini-3.5-flash-lite", "Gemini"), ("qwen2.5-3b", "Qwen 3B")):
+            path = RESULTS / f"qu_{model}_v1_{split}.md"
+            if path.exists():
+                scores = dict(
+                    [cells.strip() for cells in line.strip("|").split("|")][:2]
+                    for line in tables(path)[0].splitlines()[2:]
+                )
+                lines.append(
+                    f"| {label} | {split} | {scores['candidate recall (ceiling)']} "
+                    f"| {scores['top-1 class correct']} | {scores['any of up to 3 classes correct']} "
+                    f"| {scores['fallbacks']} | {linked(path)} |"
+                )
+    head = (
+        "| model | split | candidate recall | top-1 | any of 3 | fallbacks | report |\n"
+        "|---|---|---|---|---|---|---|"
+    )
+    return head + "\n" + "\n".join(lines) + "\n\nPrompt `v1`, vs labelled query classes."
 
 
 def judge_scores() -> str:

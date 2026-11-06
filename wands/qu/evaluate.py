@@ -135,6 +135,45 @@ def breakdown(base: Scored, boosted: Scored, groups: dict[int, str], min_size: i
     return sorted(rows, key=lambda row: row["delta"] * row["n"], reverse=True)
 
 
+def prediction_groups(
+    table: QUTable, queries: dict[int, str], gold: dict[int, str], ids: list[int]
+) -> dict[int, str]:
+    """Each query by how the LLM's classes compare with its labelled class."""
+    groups = {}
+    for qid in ids:
+        qu, _ = table.lookup(queries[qid])
+        predicted = qu.product_classes if qu else []
+        if not gold[qid]:
+            groups[qid] = "no labelled class"
+        elif predicted[:1] == [gold[qid]]:
+            groups[qid] = "top class correct"
+        elif gold[qid] in predicted:
+            groups[qid] = "correct class in top 3"
+        else:
+            groups[qid] = "correct class not predicted"
+    return groups
+
+
+def start_groups(base: Scored) -> dict[int, str]:
+    """Each query by how well the unboosted ranking already did it."""
+    groups = {}
+    for qid, value in zip(base.query_ids, base.scores["ndcg@10"], strict=True):
+        if value < 0.5:
+            groups[qid] = "started below 0.5"
+        elif value < 0.8:
+            groups[qid] = "started 0.5 to 0.8"
+        else:
+            groups[qid] = "started at 0.8 or above"
+    return groups
+
+
+def biggest_drops(base: Scored, boosted: Scored, n: int = 5) -> list[tuple[int, float, float]]:
+    """The n queries that lost most, as (query id, before, after)."""
+    a, b = base.scores["ndcg@10"], boosted.scores["ndcg@10"]
+    order = np.argsort(np.nan_to_num(b - a, nan=0.0), kind="stable")[:n]
+    return [(base.query_ids[i], float(a[i]), float(b[i])) for i in order]
+
+
 def render_breakdown(rows: list[dict], title: str) -> str:
     lines = [
         f"## {title}",

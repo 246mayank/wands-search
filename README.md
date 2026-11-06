@@ -18,11 +18,13 @@ The test split was run once, after tagging `freeze-v1`, with every row in this t
 *Not run yet: the test split runs once, after the `freeze-v1` tag.*
 <!-- test_table:end -->
 
+Hybrid retrieval is the win here, and `final` sits below it. `hybrid_rrf` was always a row in this table, but only `final` was chosen in advance, so calling hybrid the better pipeline is a judgement made after seeing test. The 20 worst queries are in [`ERROR_ANALYSIS.md`](docs/ERROR_ANALYSIS.md).
+
 ## The three questions
 
 **1. How far does a well-tuned lexical and semantic baseline get?** Stemming and field weights move BM25 a long way, and adding dense retrieval with reciprocal rank fusion moves it further, because the two fail on different queries. See [BM25](#lexical-baselines) and [fusion](#dense-retrieval-and-fusion).
 
-**2. Does LLM query understanding add relevance, and on which queries?** On dev, yes, as a soft boost; the test row above is the claim. On dev most of the gain comes from category-browse queries, and it hurts a little on a few classes such as End Tables and Wall Art. See [the breakdown](results/qu_breakdown_dev.md). A hard filter does worse: a wrong class removes correct products for good, and with a weaker model it costs far more than it gains.
+**2. Does LLM query understanding add relevance, and on which queries?** On dev, yes. On test, no, and the test result is the one that counts. The soft boost chosen on dev scored below hybrid retrieval alone on the held-out queries, and so did the Qwen boost. [`qu_gap.md`](results/qu_gap.md) looks at why, query by query. On both splits the boost helps most where hybrid starts badly, and test has fewer of those queries. A class bonus is also blunt: when hybrid already has the right products, it can lift the wrong ones over exact name matches, as with `ruckus chair`. Most of the test loss comes from five queries, so read this as "the dev gain did not hold", not as proof the idea can't work. `configs/final.yaml` stays as frozen, because swapping it after seeing test would turn the test split into a second dev split. On this evidence the boost isn't worth keeping as it stands; a next version would need a signal for when to apply it, tested on fresh queries.
 
 **3. How well does an LLM relevance judge agree with the human labels?** Well but not perfectly, see [below](#an-llm-relevance-judge). It rarely confuses Exact with Irrelevant. It is text-only, while annotators also saw product images. It is used only to estimate how much scoring unjudged results as 0 understates a ranking, and it replaces no human label.
 
@@ -206,6 +208,8 @@ From [`judge_gemini-3.5-flash-lite_v1_dev.md`](results/judge_gemini-3.5-flash-li
 
 [`eval-gate.yml`](.github/workflows/eval-gate.yml) runs `configs/final.yaml` on dev for every pull request and compares it with [`results/baseline.json`](results/baseline.json). A PR fails if dev NDCG@10 drops by more than 0.002, or if any fallback count rises.
 
+[This demo PR](https://github.com/246mayank/wands-search/pull/1) shows it working: raising the BM25 description weight to 3.0 is a one-line config change that passes the unit tests and fails the gate.
+
 Because LLM answers come from the committed cache, the gate is deterministic and costs nothing to run. Changing a prompt changes the cache key, so answers go missing, the fallback count rises and the gate fails until someone re-records them on purpose with [`qu-record.yml`](.github/workflows/qu-record.yml), the only workflow that calls an LLM.
 
 ## Limitations
@@ -213,6 +217,7 @@ Because LLM answers come from the committed cache, the gate is deterministic and
 - **Offline only.** Human labels aren't business metrics. Click logs would need position-bias correction, interleaving or A/B tests, and WANDS has none of that.
 - **One dataset,** with weights tuned to its label distribution.
 - **Small test set.** 160 queries give wide intervals, so read the CIs before the means.
+- **The boost didn't generalise.** Its weights were tuned on dev, where it gained, and it lost on test. See [`qu_gap.md`](results/qu_gap.md).
 - **Unjudged products.** They score 0, which understates every system. The judge experiment estimates the size of that gap on dev.
 - **Noisy gold classes.** Some `query_class` labels are odd, so QU accuracy is "vs labelled query classes".
 - **The cache is the whole story for QU.** A query outside it gets no boost. Tail queries aren't served, and the test split's answers were recorded offline just like dev's.
@@ -230,6 +235,7 @@ pip install -e ".[dev]"
 wands data fetch
 wands index
 bash scripts/dev_tables.sh
+wands qu gap
 ```
 
 `wands index` encodes every product, which took about ten minutes on a laptop CPU. `wands serve` starts the demo page at `http://127.0.0.1:8000`, with a "why this result" panel for each product.

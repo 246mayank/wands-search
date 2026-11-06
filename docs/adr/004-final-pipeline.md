@@ -22,3 +22,21 @@ row in the test table, so that this decision can be checked.
 
 **Consequences.** The system ships no reranker, so a claim about reranking gains would be false. The
 plan's resume template mentions one in brackets; that part is dropped.
+
+## What the test run showed
+
+Added after the single test run, drafted by Claude Code.
+
+This decision did not hold up. The soft boost beat hybrid retrieval on dev and lost to it on test, with both
+intervals excluding 0; see [the test report](../../results/test_2472151.md) and
+[`qu_gap.md`](../../results/qu_gap.md). `configs/final.yaml` stays as it was frozen and is reported as it
+is. No weight, prompt or config changed as a result, because a fix made after seeing test could not be
+evaluated on test.
+
+Reasoning that was wrong: the dev interval excluded 0, and that was read as enough. It only says the
+gain was real on those 320 queries, on which the weights were also tuned. The gain came mostly from queries
+hybrid did badly on, and the bonus is the same size on every query, so it pays nothing and can cost
+something when hybrid is already right.
+
+If this were chosen again, the pipeline would be hybrid retrieval alone, and the boost would need a signal
+for when to apply it, tested on fresh queries.

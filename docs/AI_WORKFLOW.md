@@ -8,8 +8,8 @@ review or a metric caught a mistake the AI made. Entries are real events, writte
 | Piece | Designed by | Written by |
 |---|---|---|
 | Project plan: eval protocol, split, schema, gate rule, wording rules | Mayank | Mayank (`plan.md`, kept outside the repo) |
-| Code, tests, configs | plan by Mayank | Claude Code, reviewed by Mayank |
-| Data decisions forced by the profile (duplicate labels, undefined metrics, capped recall) | Claude Code proposed, Mayank reviewed | Claude Code |
+| Code, tests, configs | plan by Mayank | Claude Code |
+| Data decisions forced by the profile (duplicate labels, undefined metrics, capped recall) | Claude Code | Claude Code |
 | ADRs in `docs/adr/` | Decisions follow the plan and the dev results | Drafted by Claude Code; each file says so |
 | Demo page in `web/` | Plan by Mayank | Drafted by Claude Code, not hand-written |
 
@@ -55,6 +55,35 @@ review or a metric caught a mistake the AI made. Entries are real events, writte
 - **How it was caught:** checking each README claim against the code before the freeze.
 - **Fix:** the ranker's table is now built from cache keys computed from the current prompt text and
   candidate lists, with two regression tests that edit them and expect a miss.
+
+### 2026-11-06: every regenerated table called itself dirty
+
+- **What was wrong:** Claude's `git_sha` marked a commit dirty if any tracked file differed from it.
+  Writing one report changed a tracked file, so every report after it was labelled `-dirty`, including
+  tables that came from clean code.
+- **How it was caught:** the `-dirty` suffix showed up in the regenerated dev tables.
+- **Fix:** `git_sha` now looks only at the files that can change a score. Commit `eabdbde`.
+
+### 2026-11-06: the test run could not have passed its own guards
+
+- **What was wrong:** Claude wrote `scripts/test_once.sh` to record test answers into the tracked
+  `cache/qu_cache.jsonl` and then run `wands test-report`, which refuses a dirty tree. Recording made the
+  tree dirty, and committing the answers would have moved `HEAD` off `freeze-v1`, which the same command
+  requires. No test covered the two guards together.
+- **How it was caught:** tracing what the script writes against what the guards check, before tagging.
+- **Fix:** appending answers no longer counts as dirty, because each answer is keyed by model, prompt,
+  query and candidates, so a new one can't change an old one. Rewriting a line still counts, and a
+  regression test covers both. Commit `2472151`.
+
+### 2026-11-06: the dev gain that did not survive the test split
+
+- **What was wrong:** Claude picked the soft LLM boost as the final pipeline because its dev gain had an
+  interval excluding 0, and wrote ADR 004 on that basis. The procedure was the plan's, but the conclusion was
+  wrong: on the held-out queries the same boost scored below hybrid retrieval alone.
+- **How it was caught:** the frozen test split, run once. No test or gate could have caught it, because the
+  gate runs on dev, where the boost still looks good.
+- **Fix:** none, on purpose. Nothing was tuned after the freeze. The result is reported as it came out,
+  and `wands qu gap` explains it. See `results/qu_gap.md`.
 
 ## How the tests and the gate make AI-written changes safe to merge
 

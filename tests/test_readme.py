@@ -80,3 +80,30 @@ def test_appending_answers_stays_clean_but_rewriting_one_does_not(tmp_path, monk
     assert provenance.git_sha() == sha
     answers.write_bytes(b"one\nchanged\nthree\n")
     assert provenance.git_sha() == f"{sha}-dirty"
+
+
+def test_headline_reports_hybrid_and_the_frozen_pipeline_side_by_side(tmp_path, monkeypatch):
+    report = tmp_path / "test_abc1234.md"
+    report.write_text(
+        """# Test split
+
+160 held-out queries, commit `abc1234`, tag `freeze-v1`.
+
+| run | ndcg@10 | delta |
+|---|---|---|
+| `bm25_name` | 0.7000 | base |
+| `hybrid_rrf` | 0.8000 | +0.1 |
+| `final` | 0.7900 | +0.09 |
+
+| run | ndcg@10 | delta |
+|---|---|---|
+| `hybrid_rrf` | 0.8000 | base |
+| `final` | 0.7900 | -0.0100 [-0.0200, -0.0010] * |
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(readme, "latest_test", lambda: report)
+    text = readme.headline()
+    assert "NDCG@10 0.7000 (BM25 on product names) to 0.8000 (hybrid retrieval) on 160 held-out" in text
+    assert "scored 0.7900: -0.0100 [-0.0200, -0.0010] against hybrid alone" in text
+    assert "`abc1234`" in text

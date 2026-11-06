@@ -1,12 +1,15 @@
 import json
 
+import numpy as np
 import polars as pl
 import pytest
 
 from wands.catalog import Catalog
+from wands.eval.report import Scored
 from wands.qu.attrs import product_attributes
 from wands.qu.cache import QUCache, QUTable, cache_key
 from wands.qu.client import LLMTimeout
+from wands.qu.evaluate import biggest_drops, prediction_groups, start_groups
 from wands.qu.schema import (
     CACHE_MISS,
     INVALID_ATTR,
@@ -264,3 +267,48 @@ def test_filter_drops_other_classes():
 def test_filter_that_would_empty_the_page_is_ignored():
     found = booster(answer(["Lamps"]), mode="filter").search(Query(text="q"), 3)
     assert [h.product_id for h in found] == [3, 1, 2]
+
+
+def scored_pair(before: list[float], after: list[float]) -> tuple[Scored, Scored]:
+    ids = list(range(len(before)))
+    base = Scored("hybrid", "dev", ids, {"ndcg@10": np.array(before)})
+    return base, Scored("final", "dev", ids, {"ndcg@10": np.array(after)})
+
+
+def test_prediction_groups_compare_answers_with_the_labelled_class():
+    answers = {
+        "right": ["Beds", "Sofas"],
+        "second": ["Sofas", "Beds"],
+        "wrong": ["Sofas"],
+        "unlabelled": ["Beds"],
+    }
+    table = QUTable(
+        {
+            text: {"reason": OK, "result": {**GOOD, "product_classes": classes}}
+            for text, classes in answers.items()
+        }
+    )
+    queries = dict(enumerate([*answers, "missing"]))
+    gold = {0: "Beds", 1: "Beds", 2: "Beds", 3: "", 4: "Beds"}
+    assert prediction_groups(table, queries, gold, list(queries)) == {
+        0: "top class correct",
+        1: "correct class in top 3",
+        2: "correct class not predicted",
+        3: "no labelled class",
+        4: "correct class not predicted",
+    }
+
+
+def test_start_groups_split_on_where_the_base_ranking_began():
+    base, _ = scored_pair([0.49, 0.5, 0.79, 0.8], [0, 0, 0, 0])
+    assert start_groups(base) == {
+        0: "started below 0.5",
+        1: "started 0.5 to 0.8",
+        2: "started 0.5 to 0.8",
+        3: "started at 0.8 or above",
+    }
+
+
+def test_biggest_drops_are_the_largest_losses_and_skip_undefined_queries():
+    base, boosted = scored_pair([0.9, 0.5, float("nan"), 0.8], [0.2, 0.6, float("nan"), 0.7])
+    assert biggest_drops(base, boosted, n=2) == [(0, 0.9, 0.2), (3, 0.8, 0.7)]
