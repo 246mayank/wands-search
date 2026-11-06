@@ -28,6 +28,7 @@ FEATURES = [
     "bm25_weighted",
     "dense",
     "rrf",
+    "qu_boosted",
     "bm25_rank",
     "dense_rank",
     "qu_class_match",
@@ -66,6 +67,7 @@ class FeatureBuilder:
         token_set = set(tokens)
         qu, _ = self.booster.table.lookup(text)
         wanted = set(qu.product_classes) if qu else set()
+        boosted = {hit.product_id: hit.score for hit in self.booster.rescore(q, hits)}
         field_scores = {field: index.scores(tokens)[at] for field, index in self.bm25.indexes.items()}
         dense = self.dense.embeddings[at] @ self.dense.encoder.encode(text)
         rows = np.zeros((len(ids), len(FEATURES)), dtype=np.float64)
@@ -81,6 +83,7 @@ class FeatureBuilder:
             rows[:, column[name]] = self.numeric[name][at]
         for i, hit in enumerate(hits):
             rows[i, column["rrf"]] = hit.score
+            rows[i, column["qu_boosted"]] = boosted.get(hit.product_id, hit.score)
             rows[i, column["bm25_rank"]] = hit.debug.get(f"{self.bm25.name}_rank", MISSING_RANK)
             rows[i, column["dense_rank"]] = hit.debug.get(f"{self.dense.name}_rank", MISSING_RANK)
             name_tokens = set(tokenize(self.world.catalog.fields["name"][at[i]], self.bm25.stem))
@@ -115,23 +118,28 @@ def make_ranker():
     )
 
 
-def training_set(data: dict[int, tuple[list[int], np.ndarray]], world: World, query_ids: list[int]):
-    """Judged candidates only: an unjudged product isn't known to be irrelevant."""
+def training_set(
+    data: dict[int, tuple[list[int], np.ndarray]],
+    world: World,
+    query_ids: list[int],
+    unjudged_as_zero: bool,
+):
+    """Candidates with a known gain. Unjudged ones are dropped, or kept as gain 0 as the metric scores them."""
     xs, ys, groups = [], [], []
     for qid in query_ids:
         ids, rows = data[qid]
         judged = world.qrels.get(qid, {})
-        keep = [i for i, pid in enumerate(ids) if pid in judged]
+        keep = [i for i, pid in enumerate(ids) if unjudged_as_zero or pid in judged]
         if len(keep) < 2:
             continue
         xs.append(rows[keep])
-        ys.append(np.array([judged[ids[i]] for i in keep]))
+        ys.append(np.array([judged.get(ids[i], 0) for i in keep]))
         groups.append(len(keep))
     return np.vstack(xs), np.concatenate(ys), groups
 
 
-def fit(data, world: World, query_ids: list[int]):
-    x, y, groups = training_set(data, world, query_ids)
+def fit(data, world: World, query_ids: list[int], unjudged_as_zero: bool):
+    x, y, groups = training_set(data, world, query_ids, unjudged_as_zero)
     return make_ranker().fit(x, y, group=groups, feature_name=FEATURES)
 
 
@@ -148,13 +156,15 @@ def folds_of(query_ids: list[int]) -> list[list[int]]:
     return [shuffled[i::FOLDS] for i in range(FOLDS)]
 
 
-def cross_validate(data, world: World, query_ids: list[int]) -> tuple[dict[int, list[int]], np.ndarray]:
+def cross_validate(
+    data, world: World, query_ids: list[int], unjudged_as_zero: bool
+) -> tuple[dict[int, list[int]], np.ndarray]:
     """Out-of-fold rankings for every query, and feature importance summed over the folds."""
     ranked: dict[int, list[int]] = {}
     importance = np.zeros(len(FEATURES))
     for held_out in folds_of(query_ids):
         train = [qid for qid in query_ids if qid not in set(held_out)]
-        model = fit(data, world, train)
+        model = fit(data, world, train, unjudged_as_zero)
         importance += model.booster_.feature_importance(importance_type="gain")
         for qid in held_out:
             ids, rows = data[qid]
