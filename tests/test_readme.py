@@ -53,3 +53,30 @@ def test_regenerated_reports_do_not_make_a_commit_dirty(tmp_path, monkeypatch):
     assert not provenance.git_sha().endswith("-dirty")
     (tmp_path / "configs" / "a.yaml").write_text("two", encoding="utf-8")
     assert provenance.git_sha().endswith("-dirty")
+
+
+def test_appending_answers_stays_clean_but_rewriting_one_does_not(tmp_path, monkeypatch):
+    # The test run appends answers at the tagged commit, and its report must still name that commit.
+    monkeypatch.chdir(tmp_path)
+
+    def git(*args: str) -> str:
+        done = subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return done.stdout.strip()
+
+    answers = tmp_path / "cache" / "qu_cache.jsonl"
+    answers.parent.mkdir()
+    answers.write_bytes(b"one\ntwo\n")
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-qm", "first")
+    sha = git("rev-parse", "--short=7", "HEAD")
+    assert provenance.git_sha() == sha
+    answers.write_bytes(b"one\ntwo\nthree\n")
+    assert provenance.git_sha() == sha
+    answers.write_bytes(b"one\nchanged\nthree\n")
+    assert provenance.git_sha() == f"{sha}-dirty"
