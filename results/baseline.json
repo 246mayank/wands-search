@@ -1,0 +1,14 @@
+{
+  "config": "configs/final.yaml",
+  "fallbacks": {},
+  "metrics": {
+    "capped_recall@100": 0.774863,
+    "judged@10": 0.89,
+    "mrr@10": 0.715888,
+    "ndcg@10": 0.78897,
+    "ndcg_exact@10": 0.622451,
+    "recall@100": 0.420478
+  },
+  "sha": "930c168-dirty",
+  "split": "dev"
+}

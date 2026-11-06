@@ -125,8 +125,8 @@ BLOCKS = {
 
 def render(text: str) -> str:
     for name, make in BLOCKS.items():
-        pattern = re.compile(rf"(<!-- {name}:start -->\n).*?(\n<!-- {name}:end -->)", re.DOTALL)
-        text, count = pattern.subn(lambda m, make=make: m.group(1) + make() + m.group(2), text)
+        pattern = re.compile(rf"(<!-- {name}:start -->\n).*?(<!-- {name}:end -->)", re.DOTALL)
+        text, count = pattern.subn(lambda m, make=make: f"{m.group(1)}{make()}\n{m.group(2)}", text)
         if count != 1:
             raise ValueError(f"README has {count} blocks named {name}")
     return text
