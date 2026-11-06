@@ -11,6 +11,8 @@ import typer
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 data_app = typer.Typer(no_args_is_help=True, help="Fetch and inspect the WANDS dataset.")
 app.add_typer(data_app, name="data")
+qu_app = typer.Typer(no_args_is_help=True, help="Offline LLM query understanding.")
+app.add_typer(qu_app, name="qu")
 
 FREEZE_TAG = "freeze-v1"
 RUNS_DIR = Path("runs")
@@ -119,6 +121,157 @@ def evaluate(
     typer.echo(f"\nreport: {path}")
 
 
+@qu_app.command("candidates")
+def qu_candidates(split: str = typer.Option("dev", help="Split to report recall on.")) -> None:
+    """Build every query's candidate class list, and report candidate recall on a split."""
+    from wands.eval.split import load_split
+    from wands.pipeline import World, build, load_config
+    from wands.qu import candidates as cand
+    from wands.qu.evaluate import candidate_recall
+
+    if split == "test":
+        require_freeze()
+    world = World.load()
+    all_classes = sorted({c for classes in world.catalog.classes for c in classes})
+    if not cand.CLASS_VECTORS_PATH.exists():
+        cand.write_class_vectors(all_classes)
+    names, vectors = cand.load_class_vectors()
+    bm25 = build(load_config(Path("configs/bm25f.yaml"))["pipeline"], world)
+    by_product = {int(p): c for p, c in zip(world.catalog.product_ids, world.catalog.classes, strict=True)}
+    table = {
+        text: cand.candidates_for(text, bm25, world.encoder, names, vectors, by_product)
+        for text in world.queries.values()
+    }
+    cand.write_candidates(table)
+    recall = candidate_recall(table, world.queries, world.query_classes, load_split(split))
+    typer.echo({k: v for k, v in recall.items() if k != "missed"})
+    for query, gold in recall["missed"][:25]:
+        typer.echo(f"  missed: {query!r} -> {gold}")
+
+
+def qu_items(world, query_ids: list[int]) -> list:
+    from wands.qu.candidates import load_candidates
+    from wands.qu.understand import Item
+
+    table = load_candidates()
+    return [Item(qid, world.queries[qid], table[world.queries[qid]]) for qid in query_ids]
+
+
+@qu_app.command("run")
+def qu_run(
+    model: str = "gemini-3.5-flash-lite",
+    prompt: str = "v1",
+    split: str = "dev",
+    limit: int = typer.Option(0, help="Only the first N queries, for a trial."),
+    batch_size: int = 20,
+) -> None:
+    """Ask the LLM about a split's queries and append the answers to cache/qu_cache.jsonl."""
+    from wands.eval.split import load_split
+    from wands.pipeline import World
+    from wands.qu.cache import QUCache
+    from wands.qu.client import make_client
+    from wands.qu.understand import understand
+
+    if split == "test":
+        require_freeze()
+    world = World.load()
+    ids = load_split(split)
+    items = qu_items(world, ids[:limit] if limit else ids)
+    typer.echo(understand(make_client(model), prompt, items, QUCache(), batch_size=batch_size))
+
+
+@qu_app.command("eval")
+def qu_eval(model: str = "gemini-3.5-flash-lite", prompt: str = "v1", split: str = "dev") -> None:
+    """Score a model + prompt against labelled query classes and write results/qu_*.md."""
+    from wands.eval.provenance import git_sha
+    from wands.eval.split import load_split
+    from wands.pipeline import World
+    from wands.qu.cache import QUCache, QUTable
+    from wands.qu.candidates import load_candidates
+    from wands.qu.evaluate import candidate_recall, class_scores, render_scores
+
+    if split == "test":
+        require_freeze()
+    world = World.load()
+    ids = load_split(split)
+    table = QUTable.from_cache(QUCache(), model, prompt)
+    scores = class_scores(table, world.queries, world.query_classes, ids)
+    recall = candidate_recall(load_candidates(), world.queries, world.query_classes, ids)
+    fallbacks = table.fallback_counts([world.queries[q] for q in ids])
+    text = render_scores(scores, model, prompt, split, git_sha(), fallbacks, recall)
+    path = Path("results") / f"qu_{model.replace(':', '-')}_{prompt}_{split}.md"
+    path.write_text(text, encoding="utf-8", newline="\n")
+    typer.echo(text.split("## Misses")[0].rstrip())
+    typer.echo(f"\nreport: {path}")
+
+
+@qu_app.command("breakdown")
+def qu_breakdown(base: Path, boosted: Path, out: Path, split: str = "dev") -> None:
+    """Where does query understanding help or hurt? By predicted intent, and by labelled class."""
+    from wands.eval.provenance import git_sha
+    from wands.eval.report import score_run
+    from wands.eval.split import load_split
+    from wands.pipeline import World, build, load_config, run_pipeline
+    from wands.qu.cache import QUCache, QUTable
+    from wands.qu.evaluate import breakdown, render_breakdown
+
+    if split == "test":
+        require_freeze()
+    world = World.load()
+    ids = load_split(split)
+    scored = []
+    for config in (base, boosted):
+        cfg = load_config(config)
+        hits = run_pipeline(build(cfg["pipeline"], world, cfg["name"]), world, ids, 10)
+        ranked = {qid: [h.product_id for h in found] for qid, found in hits.items()}
+        scored.append(score_run(ranked, world.qrels, ids, cfg["name"], split))
+    spec = load_config(boosted)["pipeline"]
+    spec = spec.get("inner", spec) if spec["type"] == "rerank" else spec
+    table = QUTable.from_cache(QUCache(), spec["model"], spec["prompt"])
+    intents, classes, attrs = {}, {}, {}
+    for qid in ids:
+        qu, reason = table.lookup(world.queries[qid])
+        intents[qid] = qu.intent if qu else reason
+        classes[qid] = world.query_classes[qid] or "(none)"
+        attrs[qid] = "has attributes" if qu and qu.attributes else "no attributes"
+    text = "\n".join(
+        [
+            f"# Where query understanding helps: `{boosted.stem}` vs `{base.stem}`\n",
+            f"Split `{split}`, commit `{git_sha()}`. Generated by `wands qu breakdown`.\n",
+            render_breakdown(breakdown(scored[0], scored[1], intents), "By predicted intent"),
+            render_breakdown(breakdown(scored[0], scored[1], attrs), "By whether attributes were predicted"),
+            render_breakdown(
+                breakdown(scored[0], scored[1], classes, min_size=4), "By labelled class, 4+ queries"
+            ),
+        ]
+    )
+    out.write_text(text, encoding="utf-8", newline="\n")
+    typer.echo(text)
+
+
+@app.command("index")
+def index(force: bool = typer.Option(False, help="Re-encode even if the files exist.")) -> None:
+    """Encode every product to data/embeddings.npy and every query to cache/query_embeddings.npz."""
+    import time
+
+    import numpy as np
+
+    from wands import data
+    from wands.catalog import Catalog
+    from wands.retrievers import dense
+
+    wands = data.load()
+    if force or not dense.EMBEDDINGS_PATH.exists():
+        texts = Catalog.from_products(wands.products).embedding_text()
+        start = time.perf_counter()
+        vectors = dense.encode_products(texts)
+        np.save(dense.EMBEDDINGS_PATH, vectors)
+        typer.echo(f"encoded {vectors.shape} in {time.perf_counter() - start:.0f}s")
+    if force or not dense.QUERY_CACHE_PATH.exists():
+        dense.write_query_cache(wands.queries["query"].to_list())
+        typer.echo(f"wrote {dense.QUERY_CACHE_PATH}")
+
+
 @app.command("tune-bm25")
 def tune_bm25_cmd() -> None:
     """Grid-search field weights on dev, log every config, and write configs/bm25f.yaml."""
@@ -130,6 +283,46 @@ def tune_bm25_cmd() -> None:
     tune.write_grid(rows, Path("results/bm25_grid_dev.csv"))
     tune.write_bm25_config(rows[0], Path("configs/bm25f.yaml"))
     for row in rows[:5]:
+        typer.echo(row)
+    typer.echo(f"... worst {rows[-1]}")
+
+
+@app.command("tune-fusion")
+def tune_fusion_cmd(config: Path = Path("configs/hybrid_rrf.yaml")) -> None:
+    """Grid-search alpha on dev, log it, and write configs/hybrid_weighted.yaml."""
+    import yaml
+
+    from wands import tune
+    from wands.eval.split import load_split
+    from wands.pipeline import World, load_config
+
+    rows = tune.tune_fusion(World.load(), load_split("dev"), config)
+    tune.write_grid(rows, Path("results/fusion_grid_dev.csv"))
+    weighted = load_config(config)
+    weighted["name"] = "hybrid_weighted"
+    weighted["pipeline"] = {**weighted["pipeline"], "method": "weighted", "alpha": rows[0]["alpha"]}
+    Path("configs/hybrid_weighted.yaml").write_text(
+        yaml.safe_dump(weighted, sort_keys=False), encoding="utf-8"
+    )
+    for row in rows:
+        typer.echo(row)
+
+
+@app.command("tune-qu")
+def tune_qu_cmd(config: Path, out: Path) -> None:
+    """Grid-search boost weights on dev for a soft-boost config, log it, and update that config."""
+    import yaml
+
+    from wands import tune
+    from wands.eval.split import load_split
+    from wands.pipeline import World, load_config
+
+    rows = tune.tune_qu(World.load(), load_split("dev"), config)
+    tune.write_grid(rows, out)
+    cfg = load_config(config)
+    cfg["pipeline"].update(w_class=rows[0]["w_class"], w_attr=rows[0]["w_attr"])
+    config.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8", newline="\n")
+    for row in rows[:6]:
         typer.echo(row)
     typer.echo(f"... worst {rows[-1]}")
 
@@ -170,6 +363,76 @@ def compare(
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8", newline="\n")
     typer.echo(text)
+
+
+@app.command("gate")
+def gate(
+    config: Path = Path("configs/final.yaml"),
+    write_baseline: bool = typer.Option(False, help="Record this run as the new baseline."),
+) -> None:
+    """Run a config on dev and fail if it regresses against results/baseline.json."""
+    from wands.eval import gate as gate_rule
+    from wands.eval.provenance import git_sha
+    from wands.eval.report import score_run
+    from wands.eval.split import load_split
+    from wands.pipeline import World, build, find_booster, load_config, run_pipeline
+
+    world = World.load()
+    query_ids = load_split("dev")
+    cfg = load_config(config)
+    retriever = build(cfg["pipeline"], world, cfg["name"])
+    hits = run_pipeline(retriever, world, query_ids, 200)
+    ranked = {qid: [h.product_id for h in found] for qid, found in hits.items()}
+    scored = score_run(ranked, world.qrels, query_ids, cfg["name"], "dev")
+    booster = find_booster(retriever)
+    texts = [world.queries[q] for q in query_ids]
+    fallbacks = booster.table.fallback_counts(texts) if booster else {}
+    source = str(config).replace("\\", "/")
+    report = gate_rule.make_report(source, "dev", git_sha(), scored.means(), fallbacks)
+    if write_baseline:
+        gate_rule.write_baseline(report)
+        typer.echo(f"wrote {gate_rule.BASELINE_PATH}: {report['metrics']}")
+        return
+    ok, lines = gate_rule.check(report, gate_rule.load_baseline())
+    for line in lines:
+        typer.echo(line)
+    typer.echo("gate passed" if ok else "gate FAILED")
+    raise typer.Exit(0 if ok else 1)
+
+
+@app.command("latency")
+def latency(config: Path = Path("configs/final_qu.yaml"), queries: int = 100, depth: int = 50) -> None:
+    """Time each online stage live on dev queries and write results/latency.md."""
+    from sentence_transformers import CrossEncoder
+
+    from wands.eval.latency import measure, render_latency
+    from wands.eval.provenance import git_sha
+    from wands.eval.split import load_split
+    from wands.pipeline import World, build, find_booster, load_config
+    from wands.rerank import CE_MODEL, CrossEncoderScorer
+
+    world = World.load()
+    cfg = load_config(config)
+    booster = find_booster(build(cfg["pipeline"], world, cfg["name"]))
+    fusion = booster.inner
+    bm25, dense = fusion.retrievers
+    scorer = CrossEncoderScorer(world.catalog, cache_path=None)
+    scorer.model = CrossEncoder(CE_MODEL, device="cpu")
+    texts = [world.queries[q] for q in load_split("dev")[:queries]]
+    rows = measure(world, bm25, dense, fusion, booster, scorer, texts, depth)
+    text = render_latency(rows, git_sha(), len(texts), "Intel i7-12700H, no GPU")
+    Path("results/latency.md").write_text(text, encoding="utf-8", newline="\n")
+    typer.echo(text)
+
+
+@app.command("serve")
+def serve(config: Path = Path("configs/final.yaml"), port: int = 8000) -> None:
+    """Run the demo API and page on localhost."""
+    import uvicorn
+
+    from wands.api import create_app
+
+    uvicorn.run(create_app(config), host="127.0.0.1", port=port)
 
 
 if __name__ == "__main__":

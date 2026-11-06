@@ -62,8 +62,8 @@ def render(wands: data.Wands, sha: str) -> str:
         "",
         "All three files are UTF-8 and tab-separated, as `read_dataset.ipynb` shows. Three traps:",
         "",
-        "- `query.csv` is CSV-quoted: three queries hold an escaped inch mark (`writing desk 48\"`). Reading it "
-        "with quoting off leaves literal `\"\"\"` in the query text.",
+        '- `query.csv` is CSV-quoted: three queries hold an escaped inch mark (`writing desk 48"`). Reading it '
+        'with quoting off leaves literal `"""` in the query text.',
         "- `product.csv` has raw inch marks inside fields, so it is read with quoting off.",
         "- The header says `category hierarchy` with a space, though the README says `category_hierarchy`. "
         "`data.load` renames it.",
@@ -112,8 +112,8 @@ def render(wands: data.Wands, sha: str) -> str:
         f"{sum(n == 1 for n in strata.values())} classes with one query.",
         f"- **Critical check:** of {len(labelled)} non-empty `query_class` values, {in_raw} match a raw "
         f"`product_class` string exactly and {in_split} match a split class. So `query_class` works as the gold "
-        "label for query understanding with **no mapping**, and accuracy is reported as \"vs labelled query "
-        f"classes\". The classes with no product are {', '.join(unmatched)}; they count as misses.",
+        'label for query understanding with **no mapping**, and accuracy is reported as "vs labelled query '
+        f'classes". The classes with no product are {", ".join(unmatched)}; they count as misses.',
         "",
         "## Attributes",
         "",
@@ -128,7 +128,7 @@ def render(wands: data.Wands, sha: str) -> str:
         "material, style, shape, pattern, room, size, theme), each of which pools several keys, such as "
         "`basecolor` and `topcolor`.",
         "",
-        "Keys are not searchable text: `mirror : no` must not match the query \"mirror\". `feature_text` keeps "
+        'Keys are not searchable text: `mirror : no` must not match the query "mirror". `feature_text` keeps '
         "values only, and drops yes/no flags and bare numbers.",
     ]
     return "\n".join(lines) + "\n"

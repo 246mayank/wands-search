@@ -1,0 +1,9 @@
+name: hybrid_rrf
+pipeline:
+  type: fusion
+  method: rrf
+  k: 60
+  depth: 200
+  retrievers:
+    - {type: ref, path: configs/bm25f.yaml, name: bm25f}
+    - {type: ref, path: configs/dense.yaml, name: dense}
