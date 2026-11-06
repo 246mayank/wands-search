@@ -695,14 +695,23 @@ def latency(config: Path = Path("configs/final_qu.yaml"), queries: int = 100, de
     typer.echo(text)
 
 
+@app.command("readme")
+def readme() -> None:
+    """Refill the generated blocks of README.md from results/."""
+    from wands.readme import update
+
+    update()
+    typer.echo("README.md updated")
+
+
 @app.command("serve")
-def serve(config: Path = Path("configs/final.yaml"), port: int = 8000) -> None:
-    """Run the demo API and page on localhost."""
+def serve(config: Path = Path("configs/final.yaml"), host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Run the demo API and page."""
     import uvicorn
 
     from wands.api import create_app
 
-    uvicorn.run(create_app(config), host="127.0.0.1", port=port)
+    uvicorn.run(create_app(config), host=host, port=port)
 
 
 if __name__ == "__main__":
