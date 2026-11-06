@@ -44,9 +44,16 @@ class QUTable:
         self.entries = entries
 
     @classmethod
-    def from_cache(cls, cache: QUCache, model: str, prompt: str) -> QUTable:
-        rows = (e for e in cache.entries.values() if e["model"] == model and e["prompt"] == prompt)
-        return cls({e["query"]: e for e in rows})
+    def from_cache(
+        cls, cache: QUCache, model: str, template: str, candidates: dict[str, list[str]]
+    ) -> QUTable:
+        """Only answers recorded for exactly this prompt text and these candidates count.
+
+        Looking up by key, not by version name, means editing a prompt in place can't serve stale
+        answers: every query misses, the fallback count rises, and the gate fails until a re-record.
+        """
+        keys = {query: cache_key(model, template, query, c) for query, c in candidates.items()}
+        return cls({query: cache.entries[key] for query, key in keys.items() if key in cache.entries})
 
     def lookup(self, query: str) -> tuple[QueryUnderstanding | None, str]:
         entry = self.entries.get(query)

@@ -89,9 +89,17 @@ class Scripted:
         return reply
 
 
+TEMPLATE = "Q:\n{{items}}\n"
+QUERIES = {"gray bed": CANDIDATES, "sofa": CANDIDATES}
+
+
+def table_of(cache: QUCache) -> QUTable:
+    return QUTable.from_cache(cache, "scripted", TEMPLATE, QUERIES)
+
+
 @pytest.fixture
 def prompts(tmp_path):
-    (tmp_path / "qu_v1.md").write_text("Q:\n{{items}}\n", encoding="utf-8")
+    (tmp_path / "qu_v1.md").write_text(TEMPLATE, encoding="utf-8")
     return tmp_path
 
 
@@ -108,7 +116,7 @@ def test_understand_caches_a_batch_and_does_not_ask_twice(prompts, tmp_path):
     stats = understand(client, "v1", ITEMS, cache, prompts_dir=prompts)
     assert stats["calls"] == 1 and stats[OK] == 2
     assert understand(client, "v1", ITEMS, cache, prompts_dir=prompts)["asked"] == 0
-    reloaded = QUTable.from_cache(QUCache(tmp_path / "c.jsonl"), "scripted", "v1")
+    reloaded = table_of(QUCache(tmp_path / "c.jsonl"))
     assert reloaded.lookup("sofa")[1] == OK
 
 
@@ -118,7 +126,7 @@ def test_understand_reasks_a_failed_item_once_then_falls_back(prompts, tmp_path)
     cache = QUCache(tmp_path / "c.jsonl")
     stats = understand(client, "v1", ITEMS, cache, prompts_dir=prompts)
     assert stats["retried"] == 1 and stats[INVALID_CLASS] == 1 and len(client.prompts) == 2
-    assert QUTable.from_cache(cache, "scripted", "v1").lookup("sofa") == (None, INVALID_CLASS)
+    assert table_of(cache).lookup("sofa") == (None, INVALID_CLASS)
 
 
 def test_understand_recovers_on_the_reask(prompts, tmp_path):
@@ -132,7 +140,28 @@ def test_understand_records_a_timeout(prompts, tmp_path):
     client = Scripted([LLMTimeout("x"), LLMTimeout("x")])
     cache = QUCache(tmp_path / "c.jsonl")
     understand(client, "v1", ITEMS[:1], cache, prompts_dir=prompts)
-    assert QUTable.from_cache(cache, "scripted", "v1").lookup("gray bed") == (None, TIMEOUT)
+    assert table_of(cache).lookup("gray bed") == (None, TIMEOUT)
+
+
+def test_editing_a_prompt_in_place_misses_every_answer(prompts, tmp_path):
+    cache = QUCache(tmp_path / "c.jsonl")
+    client = Scripted([reply({**GOOD, "id": 1}, {**GOOD, "id": 2})])
+    understand(client, "v1", ITEMS, cache, prompts_dir=prompts)
+    assert table_of(cache).lookup("sofa")[1] == OK
+    assert QUTable.from_cache(cache, "scripted", TEMPLATE + "edited", QUERIES).lookup("sofa") == (
+        None,
+        CACHE_MISS,
+    )
+
+
+def test_changing_candidates_misses_the_answer(prompts, tmp_path):
+    cache = QUCache(tmp_path / "c.jsonl")
+    client = Scripted([reply({**GOOD, "id": 1}, {**GOOD, "id": 2})])
+    understand(client, "v1", ITEMS, cache, prompts_dir=prompts)
+    assert QUTable.from_cache(cache, "scripted", TEMPLATE, {"sofa": ["Beds"]}).lookup("sofa") == (
+        None,
+        CACHE_MISS,
+    )
 
 
 def test_table_counts_misses_and_fallbacks():

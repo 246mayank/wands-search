@@ -191,15 +191,16 @@ def qu_eval(model: str = "gemini-3.5-flash-lite", prompt: str = "v1", split: str
     from wands.eval.provenance import git_sha
     from wands.eval.split import load_split
     from wands.pipeline import World
-    from wands.qu.cache import QUCache, QUTable
+    from wands.qu.cache import QUCache
     from wands.qu.candidates import load_candidates
     from wands.qu.evaluate import candidate_recall, class_scores, render_scores
+    from wands.qu.understand import load_table
 
     if split == "test":
         require_freeze()
     world = World.load()
     ids = load_split(split)
-    table = QUTable.from_cache(QUCache(), model, prompt)
+    table = load_table(QUCache(), model, prompt)
     scores = class_scores(table, world.queries, world.query_classes, ids)
     recall = candidate_recall(load_candidates(), world.queries, world.query_classes, ids)
     fallbacks = table.fallback_counts([world.queries[q] for q in ids])
@@ -217,8 +218,9 @@ def qu_breakdown(base: Path, boosted: Path, out: Path, split: str = "dev") -> No
     from wands.eval.report import score_run
     from wands.eval.split import load_split
     from wands.pipeline import World, build, load_config, run_pipeline
-    from wands.qu.cache import QUCache, QUTable
+    from wands.qu.cache import QUCache
     from wands.qu.evaluate import breakdown, render_breakdown
+    from wands.qu.understand import load_table
 
     if split == "test":
         require_freeze()
@@ -232,7 +234,7 @@ def qu_breakdown(base: Path, boosted: Path, out: Path, split: str = "dev") -> No
         scored.append(score_run(ranked, world.qrels, ids, cfg["name"], split))
     spec = load_config(boosted)["pipeline"]
     spec = spec.get("inner", spec) if spec["type"] == "rerank" else spec
-    table = QUTable.from_cache(QUCache(), spec["model"], spec["prompt"])
+    table = load_table(QUCache(), spec["model"], spec["prompt"])
     intents, classes, attrs = {}, {}, {}
     for qid in ids:
         qu, reason = table.lookup(world.queries[qid])
@@ -266,14 +268,15 @@ def qu_rewrite(
     """Rewrite the queries QU was unsure about, and append them to cache/rewrites.jsonl."""
     from wands.eval.split import load_split
     from wands.pipeline import World
-    from wands.qu.cache import QUCache, QUTable
+    from wands.qu.cache import QUCache
     from wands.qu.client import make_client
     from wands.qu.rewrite import eligible, load_rewrites, rewrite_all, save_rewrites
+    from wands.qu.understand import load_table
 
     if split == "test":
         require_freeze()
     world = World.load()
-    table = QUTable.from_cache(QUCache(), model, qu_prompt)
+    table = load_table(QUCache(), model, qu_prompt)
     known = load_rewrites(out)
     texts = [world.queries[q] for q in load_split(split)]
     todo = [t for t in texts if (every_query or eligible(table, t)) and t not in known]

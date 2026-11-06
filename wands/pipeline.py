@@ -11,8 +11,9 @@ import yaml
 from wands import data
 from wands.catalog import Catalog
 from wands.eval.qrels import Qrels, build_qrels
-from wands.qu.cache import QUCache, QUTable
+from wands.qu.cache import QUCache
 from wands.qu.rewrite import REWRITES_PATH, RewriteRetriever, load_rewrites
+from wands.qu.understand import load_table
 from wands.rerank import CrossEncoderReranker, CrossEncoderScorer
 from wands.retrievers.bm25f import BM25FRetriever, IndexStore
 from wands.retrievers.booster import QUBooster
@@ -103,7 +104,7 @@ def build(spec: dict, world: World, name: str = "pipeline") -> Retriever:
     if kind == "qu_boost":
         return QUBooster(
             build(spec["inner"], world),
-            QUTable.from_cache(world.qu_cache, spec["model"], spec["prompt"]),
+            load_table(world.qu_cache, spec["model"], spec["prompt"]),
             world.catalog,
             w_class=spec.get("w_class", 0.2),
             w_attr=spec.get("w_attr", 0.1),

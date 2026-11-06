@@ -1,0 +1,13 @@
+name: hybrid_qu_qwen
+pipeline:
+  type: qu_boost
+  mode: soft
+  model: qwen2.5:3b
+  prompt: v1
+  w_class: 0.5
+  w_attr: 0.1
+  depth: 200
+  inner:
+    type: ref
+    path: configs/hybrid_rrf.yaml
+    name: hybrid_rrf

@@ -6,7 +6,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from wands.qu.cache import QUCache, cache_key
+from wands.qu.cache import QUCache, QUTable, cache_key
+from wands.qu.candidates import load_candidates
 from wands.qu.client import LLMClient, LLMTimeout
 from wands.qu.schema import MALFORMED_JSON, OK, TIMEOUT, parse_item
 
@@ -23,6 +24,11 @@ class Item:
 
 def prompt_text(version: str, prompts_dir: Path = PROMPTS_DIR) -> str:
     return (prompts_dir / f"qu_{version}.md").read_text(encoding="utf-8")
+
+
+def load_table(cache: QUCache, model: str, version: str, prompts_dir: Path = PROMPTS_DIR) -> QUTable:
+    """The answers valid for a prompt file and the candidate lists as they are now."""
+    return QUTable.from_cache(cache, model, prompt_text(version, prompts_dir), load_candidates())
 
 
 def render(template: str, items: list[Item]) -> str:

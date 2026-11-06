@@ -46,6 +46,16 @@ review or a metric caught a mistake the AI made. Entries are real events, writte
 - **Fix:** both training variants are reported in `results/ltr_dev.md`, with the caveat that the better
   one may partly learn the annotation pool. Commit `423bc9d` onwards.
 
+### 2026-11-06: the README promised something the code didn't do
+
+- **What was wrong:** the README said that changing a prompt changes the cache key, so the gate fails
+  until someone re-records. Claude had written that sentence from the plan, but the code that fed the
+  ranker looked answers up by version name (`v1`), not by key. Editing `qu_v1.md` in place would have
+  kept serving the old answers, with the gate green.
+- **How it was caught:** checking each README claim against the code before the freeze.
+- **Fix:** the ranker's table is now built from cache keys computed from the current prompt text and
+  candidate lists, with two regression tests that edit them and expect a miss.
+
 ## How the tests and the gate make AI-written changes safe to merge
 
 - The metrics are checked against hand-computed cases and against `ranx`, so a wrong formula fails

@@ -10,6 +10,7 @@ import numpy as np
 from wands.eval.report import Scored
 from wands.qu.cache import QUTable
 from wands.qu.schema import OK
+from wands.retrievers.booster import match_tokens
 
 
 def candidate_recall(
@@ -39,13 +40,15 @@ class ClassScores:
     intents: Counter
     confidence: Counter
     attribute_queries: int
+    attribute_values: int
+    grounded_values: int
 
 
 def class_scores(
     table: QUTable, queries: dict[int, str], gold: dict[int, str], ids: list[int]
 ) -> ClassScores:
     """Accuracy vs labelled query classes. A fallback answer counts as a miss, not as a skip."""
-    labelled = answered = top1 = any3 = with_attrs = 0
+    labelled = answered = top1 = any3 = with_attrs = values = grounded = 0
     confusions = []
     intents: Counter = Counter()
     confidence: Counter = Counter()
@@ -55,6 +58,9 @@ def class_scores(
             intents[qu.intent] += 1
             confidence[qu.confidence] += 1
             with_attrs += bool(qu.attributes)
+            words = match_tokens(queries[qid])
+            values += len(qu.attributes)
+            grounded += sum(match_tokens(value) <= words for value in qu.attributes.values())
         if not gold[qid]:
             continue
         labelled += 1
@@ -67,7 +73,9 @@ def class_scores(
         any3 += hit
         if not hit:
             confusions.append((queries[qid], gold[qid], qu.product_classes))
-    return ClassScores(labelled, answered, top1, any3, confusions, intents, confidence, with_attrs)
+    return ClassScores(
+        labelled, answered, top1, any3, confusions, intents, confidence, with_attrs, values, grounded
+    )
 
 
 def render_scores(
@@ -91,6 +99,7 @@ def render_scores(
         f"| any of up to 3 classes correct | {pct(s.any3)} |",
         f"| fallbacks | {sum(fallbacks.values())} {fallbacks or ''} |",
         f"| queries with an attribute | {s.attribute_queries} |",
+        f"| attribute values using only the query's words | {s.grounded_values}/{s.attribute_values} |",
         f"| intents | {dict(s.intents)} |",
         f"| confidence | {dict(s.confidence)} |",
         "",
