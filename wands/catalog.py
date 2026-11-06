@@ -13,12 +13,19 @@ from wands.text import feature_text, split_classes
 FIELDS = ["name", "class", "hierarchy", "features", "description"]
 
 
+def _column(products: pl.DataFrame, name: str) -> np.ndarray:
+    if name not in products.columns:
+        return np.full(products.height, np.nan)
+    return products[name].cast(pl.Float64).to_numpy()
+
+
 @dataclass
 class Catalog:
     product_ids: np.ndarray
     fields: dict[str, list[str]]  # field -> text per product, aligned with product_ids
     classes: list[tuple[str, ...]]
     raw_features: list[str]
+    numeric: dict[str, np.ndarray]  # rating columns, NaN where a product has no ratings
 
     def __len__(self) -> int:
         return len(self.product_ids)
@@ -35,7 +42,12 @@ class Catalog:
             "features_raw": features,  # for the ablation against the cleaned text above
             "description": products["product_description"].to_list(),
         }
-        return cls(products["product_id"].to_numpy(), fields, classes, features)
+        numeric = {
+            "log_rating_count": np.log1p(_column(products, "rating_count")),
+            "average_rating": _column(products, "average_rating"),
+            "log_review_count": np.log1p(_column(products, "review_count")),
+        }
+        return cls(products["product_id"].to_numpy(), fields, classes, features, numeric)
 
     def all_text(self) -> list[str]:
         return [" ".join(parts) for parts in zip(*(self.fields[f] for f in FIELDS), strict=True)]

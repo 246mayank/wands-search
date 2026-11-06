@@ -1,0 +1,3 @@
+# Chosen on dev: hybrid + soft QU boost. The cross-encoder added nothing, see results/rerank_dev.md.
+name: final
+pipeline: {type: ref, path: configs/hybrid_qu.yaml, name: final}

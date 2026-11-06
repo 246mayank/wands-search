@@ -25,7 +25,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.17,<0.18", "ranx>=0.3.20"]
+dev = ["pytest>=8", "ruff>=0.17,<0.18", "ranx>=0.3.20", "lightgbm>=4.3"]
+ltr = ["lightgbm>=4.3"]
 
 [project.scripts]
 wands = "wands.cli:app"

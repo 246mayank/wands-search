@@ -1,0 +1,5 @@
+name: pop_0.05
+pipeline:
+  type: popularity
+  weight: 0.05
+  inner: {type: ref, path: configs/hybrid_qu.yaml, name: hybrid_qu}

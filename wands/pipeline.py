@@ -17,6 +17,7 @@ from wands.retrievers.bm25f import BM25FRetriever, IndexStore
 from wands.retrievers.booster import QUBooster
 from wands.retrievers.dense import EMBEDDINGS_PATH, DenseRetriever, QueryEncoder
 from wands.retrievers.fusion import RRF_K, FusionRetriever
+from wands.retrievers.popularity import PopularityPrior
 from wands.types import Hit, Query, Retriever
 
 
@@ -109,6 +110,12 @@ def build(spec: dict, world: World, name: str = "pipeline") -> Retriever:
             depth=spec.get("depth", 200),
             name=name,
         )
+    if kind == "popularity":
+        return PopularityPrior(build(spec["inner"], world), world.catalog, spec["weight"], name=name)
+    if kind == "ltr":
+        from wands.ltr import LTRRetriever, builder_for
+
+        return LTRRetriever(builder_for(spec["inner"], world), name=name)
     if kind == "rerank":
         return CrossEncoderReranker(
             build(spec["inner"], world),
