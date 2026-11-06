@@ -124,7 +124,7 @@ def training_set(
     query_ids: list[int],
     unjudged_as_zero: bool,
 ):
-    """Candidates with a known gain. Unjudged ones are dropped, or kept as gain 0 as the metric scores them."""
+    """Candidates with a known gain. Unjudged ones are dropped, or kept at gain 0 like the metric does."""
     xs, ys, groups = [], [], []
     for qid in query_ids:
         ids, rows = data[qid]
