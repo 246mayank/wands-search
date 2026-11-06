@@ -671,7 +671,7 @@ def gate(
 
 
 @app.command("latency")
-def latency(config: Path = Path("configs/final_qu.yaml"), queries: int = 100, depth: int = 50) -> None:
+def latency(config: Path = Path("configs/final.yaml"), queries: int = 100, depth: int = 50) -> None:
     """Time each online stage live on dev queries and write results/latency.md."""
     from sentence_transformers import CrossEncoder
 
