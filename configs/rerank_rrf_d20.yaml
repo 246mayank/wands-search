@@ -1,0 +1,6 @@
+name: rerank_rrf_d20
+pipeline:
+  type: rerank
+  mode: rrf
+  depth: 20
+  inner: {type: ref, path: configs/hybrid_qu.yaml, name: hybrid_qu}

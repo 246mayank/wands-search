@@ -1,0 +1,8 @@
+name: hybrid_qu_filter
+pipeline:
+  type: qu_boost
+  mode: filter
+  model: gemini-3.5-flash-lite
+  prompt: v1
+  depth: 200
+  inner: {type: ref, path: configs/hybrid_rrf.yaml, name: hybrid_rrf}

@@ -1,0 +1,6 @@
+name: rerank_d100
+pipeline:
+  type: rerank
+  mode: score
+  depth: 100
+  inner: {type: ref, path: configs/hybrid_qu.yaml, name: hybrid_qu}
