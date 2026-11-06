@@ -1,0 +1,5 @@
+name: bm25_all
+pipeline:
+  type: bm25f
+  field_weights: {all: 1.0}
+  stem: true

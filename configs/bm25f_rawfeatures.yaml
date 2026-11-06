@@ -1,0 +1,5 @@
+name: bm25f_rawfeatures
+pipeline:
+  type: bm25f
+  field_weights: {name: 2, class: 1, hierarchy: 0.5, features_raw: 0.5, description: 0.5}
+  stem: true

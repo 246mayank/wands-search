@@ -1,0 +1,10 @@
+name: bm25f
+pipeline:
+  type: bm25f
+  field_weights:
+    name: 2
+    class: 1
+    hierarchy: 0.5
+    features: 0.5
+    description: 0.5
+  stem: true

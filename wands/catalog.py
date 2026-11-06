@@ -32,6 +32,7 @@ class Catalog:
             "class": [" ".join(c) for c in classes],
             "hierarchy": products["category_hierarchy"].to_list(),
             "features": [feature_text(f) for f in features],
+            "features_raw": features,  # for the ablation against the cleaned text above
             "description": products["product_description"].to_list(),
         }
         return cls(products["product_id"].to_numpy(), fields, classes, features)
